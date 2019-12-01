@@ -1,28 +1,30 @@
-import { Injectable, Inject } from '@angular/core';
+import { Injectable, Inject, Injector } from '@angular/core';
 import { Route } from '@angular/router';
 import { PreloadingGuard } from '../guards';
 import { PreloadingStrategyPlugin } from '../utils';
-import { PRELOADING_GUARD, PRELOADING_CONFIG, IPreloadingConfig } from '..';
+import { PRELOADING_GUARD, PRELOADING_CONFIG, IPreloadingConfig, IRoutePreloadingConfig } from '..';
+import { WithRouteConfig } from '../decorators';
 
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable()
 export class EagerPreloadingStrategyPlugin extends PreloadingStrategyPlugin {
-  public readonly name: string = 'eager strategy';
+  public readonly name: string = 'Eager strategy';
 
   constructor(
+    public injector: Injector,
     @Inject(PRELOADING_GUARD)  public  preloadingGuard: PreloadingGuard,
     @Inject(PRELOADING_CONFIG) public  preloadingConfig: IPreloadingConfig,
   ) {
     super();
   }
 
-  public shouldPreload(route: Route): boolean {
-    return route.data && route.data['eagerPreload'] || false;
+  @WithRouteConfig()
+  public shouldPreload(route: Route, config: IRoutePreloadingConfig): boolean {
+    return this.supports(route, config);
   }
 
-  public supports(route: Route): boolean {
-    return route.data && route.data['eagerPreload'];
+  @WithRouteConfig()
+  public supports(_route: Route, config: IRoutePreloadingConfig): boolean {
+    return !!config && !!config['eagerPreload'] || false;
   }
 }

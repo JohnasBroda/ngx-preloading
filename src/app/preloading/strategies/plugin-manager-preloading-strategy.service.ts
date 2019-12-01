@@ -29,10 +29,6 @@ export class PluginManagerPreloadingStrategy implements PreloadingStrategy {
 
   public preloadedRoutes: string[] = [];
 
-  public get workDone(): Observable<void> {
-    return this._workDone.asObservable();
-  }
-
   private get preloadingPlugins(): IPreloadingStrategyPlugin[] {
     if (!!this._preloadingPlugins) {
       return this._preloadingPlugins;
@@ -104,6 +100,10 @@ export class PluginManagerPreloadingStrategy implements PreloadingStrategy {
     if (!this.startedPreloading) {
       this.startedPreloading = true;
       this.preloadingEventBus.signal(new PreloadingStart(route));
+    }
+
+    if (!this.recognizedRoutes.includes(route.path)) {
+      return EMPTY;
     }
 
     if (this.preloadedRoutes.includes(route.path)) {
@@ -202,10 +202,6 @@ export class PluginManagerPreloadingStrategy implements PreloadingStrategy {
     return race(combined);
   }
 
-  private signal(): void {
-    this._workDone.next();
-  }
-
   private isLastRoute(route: Route): boolean {
     const flattenedRoutes = this.flattenRouterConfig();
     return flattenedRoutes.indexOf(route.path) === flattenedRoutes.length - 1;
@@ -252,9 +248,18 @@ export class PluginManagerPreloadingStrategy implements PreloadingStrategy {
     }
 
     const { pluginConfigs } = this.preloadingConfig;
-    return pluginConfigs.find(
-      config => config.plugin.name === plugin.name
-    ) || null;
+    return pluginConfigs.find(config => {
+      const configsPlugin = this.injector.get(config.plugin);
+
+      if (!!configsPlugin === false) {
+          return false;
+      }
+
+      return  !!config
+          &&  !!config.plugin
+          &&  configsPlugin.name === plugin.name
+          ||  false;
+    }) || null;
   }
 
   private getGuardSignalFor(

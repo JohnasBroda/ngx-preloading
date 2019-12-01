@@ -3,9 +3,7 @@ import { Subject } from 'rxjs';
 import { OnDemandPreloadingOptions } from '../utils';
 
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable()
 export class OnDemandPreloadingService {
 
   private _notifier = new Subject<OnDemandPreloadingOptions>();

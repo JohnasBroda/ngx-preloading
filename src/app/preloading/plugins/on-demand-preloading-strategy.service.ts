@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@angular/core';
+import { Injectable, Inject, Injector } from '@angular/core';
 import { Observable, of } from 'rxjs';
 import { Route } from '@angular/router';
 import { map, mapTo } from 'rxjs/operators';
@@ -7,25 +7,25 @@ import { OnDemandPreloadingService } from '../services';
 import { PreloadingGuard } from '../guards';
 import { waitFor } from 'src/app/shared/functions';
 import { PRELOADING_CONFIG, PRELOADING_GUARD } from '../tokens';
-import { IPreloadingConfig } from '../interfaces';
+import { IPreloadingConfig, IRoutePreloadingConfig } from '../interfaces';
+import { WithRouteConfig } from '../decorators';
 
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable()
 export class OnDemandPreloadingStrategyPlugin extends PreloadingStrategyPlugin {
 
-  public readonly name: string = 'on demand strategy';
+  public readonly name: string = 'On Demand strategy';
 
   private preloadOnDemand$: Observable<OnDemandPreloadingOptions>;
 
   constructor(
-    private onDemand: OnDemandPreloadingService,
+    public injector: Injector,
+    private onDemandPreloader: OnDemandPreloadingService,
     @Inject(PRELOADING_GUARD)  public  preloadingGuard: PreloadingGuard,
     @Inject(PRELOADING_CONFIG) public  preloadingConfig: IPreloadingConfig,
   ) {
     super(false);
-    this.preloadOnDemand$ = this.onDemand.preload$;
+    this.preloadOnDemand$ = this.onDemandPreloader.preload$;
   }
 
   public shouldPreload(route: Route): Observable<boolean> {
@@ -38,8 +38,9 @@ export class OnDemandPreloadingStrategyPlugin extends PreloadingStrategyPlugin {
     );
   }
 
-  public supports(route: Route): boolean {
-    return route.data && route.data['preload'];
+  @WithRouteConfig()
+  public supports(_route: Route, config: IRoutePreloadingConfig): boolean {
+    return !!config && !!config['onDemandPreload'];
   }
 
   private preloadCheck(

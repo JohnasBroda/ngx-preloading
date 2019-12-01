@@ -5,3 +5,6 @@ export { DEFAULT_PRELOADING_CONFIG } from './default-preloading-config';
 export { PRELOADING_CONFIG } from './preloading-config';
 export { WINDOW } from './window-ref';
 export { NAVIGATOR } from './navigator-ref';
+export { NETWORK_AWARE_PRELOADING_CHECK } from './network-aware-preloading-check';
+export { CONNECTION_TYPE_BLACKLIST } from './connection-type-blacklist';
+export { EFFECTIVE_CONNECTION_TYPE_BLACKLIST } from './effective-connection-type-blacklist';

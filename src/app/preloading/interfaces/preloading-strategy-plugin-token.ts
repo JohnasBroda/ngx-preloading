@@ -14,7 +14,3 @@ export interface IPreloadingPluginConfig extends IPreloadingConfigBase {
      */
     priority: number;
 }
-
-export interface IPreloadingStrategyPluginDefaultConfig extends IPreloadingPluginConfig {
-    default: true;
-}

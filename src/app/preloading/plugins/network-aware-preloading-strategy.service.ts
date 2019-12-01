@@ -1,54 +1,165 @@
-import { Injectable, Inject } from '@angular/core';
-import { Route } from '@angular/router';
+import { Injectable, Inject, Injector, Optional } from '@angular/core';
 import { PreloadingStrategyPlugin } from '../utils';
-import { PRELOADING_GUARD, PRELOADING_CONFIG, NAVIGATOR } from '../tokens';
+import {
+  PRELOADING_GUARD,
+  PRELOADING_CONFIG,
+  NAVIGATOR,
+  NETWORK_AWARE_PRELOADING_CHECK,
+  CONNECTION_TYPE_BLACKLIST,
+  EFFECTIVE_CONNECTION_TYPE_BLACKLIST
+} from '../tokens';
 import { PreloadingGuard } from '../guards';
-import { IPreloadingConfig } from '../interfaces';
+import { IPreloadingConfig, IRoutePreloadingConfig } from '../interfaces';
+import { PreloadingCheck, BlacklistHandlingStrategy } from '../types';
+import { Route } from '@angular/router';
+import { WithRouteConfig } from '../decorators';
+import { BehaviorSubject, combineLatest } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable()
 export class NetworkAwarePreloadingStrategyPlugin extends PreloadingStrategyPlugin {
 
-  public readonly name: string = 'network aware strategy';
+  public readonly name: string = 'Network aware strategy';
 
-  private get connection() {
+  private get connection(): NetworkInformation {
     return this.navigator && this.navigator['connection']
-        || this.navigator['mozConnection']
-        || this.navigator['webkitConnection'];
+        || this.navigator['mozConnection'] as NetworkInformation
+        || this.navigator['webkitConnection'] as NetworkInformation;
   }
+
+  private get connectionType(): ConnectionType | null {
+    return !!this.connection && this.connection.type || null;
+  }
+
+  private get effectiveConnectionType(): EffectiveConnectionType | null {
+    return !!this.connection && this.connection.effectiveType || null;
+  }
+
+  private get defaultPreloadingCheck(): PreloadingCheck {
+    return (_route: Route, config: IRoutePreloadingConfig) => {
+      if (!config || !this.connection || this.connection.saveData) {
+        return false;
+      }
+
+      const effectiveType = this.connection.effectiveType || '' as EffectiveConnectionType;
+      const connectionType = this.connection.type || '' as ConnectionType;
+
+      const {
+        connectionTypeBlacklist,
+        effectiveConnectionTypeBlacklist,
+        connectionTypeBlacklistHandlingStrategy,
+        effectiveConnectionTypeBlacklistHandlingStrategy,
+      } = config;
+
+      const applicableEffectiveTypeBlacklist = this.getApplicableEffectiveTypeBlacklist(
+        effectiveConnectionTypeBlacklist,
+        effectiveConnectionTypeBlacklistHandlingStrategy
+      );
+
+      const applicableConnectionTypeBlacklist = this.getApplicableConnectionTypeBlacklist(
+        connectionTypeBlacklist,
+        connectionTypeBlacklistHandlingStrategy
+      );
+
+      const isEffectiveTypeValid = applicableEffectiveTypeBlacklist.includes(effectiveType) === false;
+      const isConnTypeValid = applicableConnectionTypeBlacklist.includes(connectionType) === false;
+
+      if (!isEffectiveTypeValid || !isConnTypeValid) {
+        return combineLatest([
+          this.connectionType$,
+          this.effectiveConnectionType$
+        ]).pipe(
+          map(types => {
+            const connType = types[0] as unknown as ConnectionType;
+            const effectiveConnType = types[1] as EffectiveConnectionType;
+
+            return applicableConnectionTypeBlacklist.includes(connType) === false
+                && applicableEffectiveTypeBlacklist.includes(effectiveConnType) === false;
+          })
+        );
+      }
+
+      return true;
+    };
+  }
+
+  private get preloadingCheck(): PreloadingCheck {
+    return this.customPreloadingCheck || this.defaultPreloadingCheck;
+  }
+
+  private readonly connectionType$ = new BehaviorSubject<ConnectionType>(this.connectionType);
+  private readonly effectiveConnectionType$ = new BehaviorSubject(this.effectiveConnectionType);
 
   constructor(
-    @Inject(NAVIGATOR)         private navigator: Navigator,
-    @Inject(PRELOADING_GUARD)  public  preloadingGuard: PreloadingGuard,
-    @Inject(PRELOADING_CONFIG) public  preloadingConfig: IPreloadingConfig,
+    public injector: Injector,
+    @Inject(NAVIGATOR)
+    private navigator: Navigator,
+    @Inject(PRELOADING_GUARD)
+    public preloadingGuard: PreloadingGuard,
+    @Inject(PRELOADING_CONFIG)
+    public preloadingConfig: IPreloadingConfig,
+    @Inject(EFFECTIVE_CONNECTION_TYPE_BLACKLIST)
+    private effectiveConnectionTypeBlacklist: EffectiveConnectionType[],
+    @Inject(CONNECTION_TYPE_BLACKLIST)
+    private connectionTypeBlacklist: ConnectionType[],
+    @Optional() @Inject(NETWORK_AWARE_PRELOADING_CHECK)
+    private customPreloadingCheck: PreloadingCheck,
   ) {
     super();
+    this.setUpStreams();
   }
 
-  public supports(route: Route): boolean {
-    return route.data && route.data['preload'];
+  @WithRouteConfig()
+  public supports(_route: Route, config: IRoutePreloadingConfig): boolean {
+    return !!config && !!config['networkAwarePreload'];
   }
 
-  public shouldPreload(route: Route): boolean {
-    if (!route.data || !route.data['preload']) {
-      return false;
+  @WithRouteConfig()
+  public shouldPreload(route: Route, config: IRoutePreloadingConfig): boolean {
+    return this.preloadingCheck.call(route, config);
+  }
+
+  private setUpStreams(): void {
+    this.connection.addEventListener('change', () => {
+      this.connectionType$.next(this.connectionType);
+      this.effectiveConnectionType$.next(this.effectiveConnectionType);
+    });
+  }
+
+  private getApplicableEffectiveTypeBlacklist(
+    configuredBlackList: EffectiveConnectionType[],
+    strategy: BlacklistHandlingStrategy
+  ): EffectiveConnectionType[] {
+    return this.mergeBlacklists(
+      this.effectiveConnectionTypeBlacklist,
+      configuredBlackList,
+      strategy
+    );
+  }
+
+  private getApplicableConnectionTypeBlacklist(
+    configuredBlackList: ConnectionType[],
+    strategy: BlacklistHandlingStrategy
+  ) {
+    return this.mergeBlacklists(
+      this.connectionTypeBlacklist,
+      configuredBlackList,
+      strategy
+    );
+  }
+
+  private mergeBlacklists<T extends any[]>(
+    defaultBlackList: T,
+    configuredBlackList: T,
+    strategy: BlacklistHandlingStrategy
+  ): T {
+    if (!configuredBlackList) {
+      return defaultBlackList;
     }
 
-    if (!this.connection) {
-      return false;
-    }
-
-    if (this.connection.saveData) {
-      return false;
-    }
-
-    const effectiveType = this.connection.effectiveType || '';
-    if (effectiveType.includes('2g')) {
-      return false;
-    }
-
-    return true;
+    return strategy === 'merge'
+      ? [ ...defaultBlackList, ...configuredBlackList ] as T
+      : configuredBlackList as T;
   }
 }

@@ -1,17 +1,16 @@
-import { Injectable, Inject } from '@angular/core';
+import { Injectable, Inject, Injector } from '@angular/core';
 import { IPreloadingConfig } from '../interfaces';
 import { PRELOADING_GUARD, PreloadingGuard, PRELOADING_CONFIG } from '..';
 import { Route } from '@angular/router';
 import { PreloadingStrategyPlugin } from '../utils';
 
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable()
 export class MockPreloadingStrategyService extends PreloadingStrategyPlugin {
-  name = 'mock plugin';
+  name = 'Mock strategy';
 
   constructor(
+    public injector: Injector,
     @Inject(PRELOADING_GUARD)  public  preloadingGuard: PreloadingGuard,
     @Inject(PRELOADING_CONFIG) public  preloadingConfig: IPreloadingConfig,
   ) {
